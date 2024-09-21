@@ -4,7 +4,7 @@ use poem::web::RemoteAddr;
 use poem_openapi::{ApiResponse, Object, OpenApi};
 use poem_openapi::payload::Json;
 
-use crate::http_client::HttpClient;
+use crate::http_client::{HttpClient, WeatherApiResponse};
 
 pub mod config;
 pub mod http_client;
@@ -15,7 +15,7 @@ pub struct Api {
 
 impl Api {
     #[must_use]
-    pub fn new(http_client: HttpClient) -> Self {
+    pub const fn new(http_client: HttpClient) -> Self {
         Self {
             http_client,
         }
@@ -49,12 +49,12 @@ impl Api {
         let latitude = response.latitude;
         let longitude = response.longitude;
 
-        let response = match self.http_client.get_weather_for_coordinates(latitude, longitude).await {
+        let WeatherApiResponse { temperature, feels_like, condition, last_updated } = match self.http_client.get_weather_for_coordinates(latitude, longitude).await {
             Ok(r) => r,
             Err(e) => return WeatherResponse::WeatherQueryFailed(Json(ErrorMessage { message: e.to_string() }))
         };
 
-        let response_body = WeatherResponseBody { temperature: 0.0, feels_like: 0.0, condition: String::new(), last_updated: String::new() };
+        let response_body = WeatherResponseBody { temperature, feels_like, condition, last_updated };
 
         WeatherResponse::Success(Json(response_body))
     }
