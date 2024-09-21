@@ -5,6 +5,7 @@ use std::io::{BufReader, Read};
 pub struct Config {
     pub port: u16,
     pub weather_api_key: String,
+    pub database_name: String,
 }
 
 impl Config {

@@ -3,6 +3,7 @@ use std::fmt::{Display, Formatter};
 use poem::web::RemoteAddr;
 use poem_openapi::{ApiResponse, Object, OpenApi};
 use poem_openapi::payload::Json;
+use sqlx::SqlitePool;
 
 use crate::http_client::{HttpClient, WeatherApiResponse};
 
@@ -11,13 +12,15 @@ pub mod http_client;
 
 pub struct Api {
     http_client: HttpClient,
+    database: SqlitePool,
 }
 
 impl Api {
     #[must_use]
-    pub const fn new(http_client: HttpClient) -> Self {
+    pub const fn new(http_client: HttpClient, database: SqlitePool) -> Self {
         Self {
             http_client,
+            database,
         }
     }
 }
