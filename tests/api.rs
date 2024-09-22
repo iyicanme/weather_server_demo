@@ -14,7 +14,8 @@ async fn health_check_succeeds() {
     let database = spawn_server().await;
 
     let client = reqwest::Client::default();
-    let response = client.get("http://127.0.0.1:8000/api/health_check")
+     let response = client
+        .get("http://127.0.0.1:8000/api/health_check")
         .send()
         .await
         .expect("health check failed");
@@ -30,10 +31,15 @@ async fn register_succeeds() {
     let database = spawn_server().await;
 
     let user = User::random();
-    let request_body = RegisterBody { username: user.username, email: user.email, password: user.password };
+    let request_body = RegisterBody {
+        username: user.username,
+        email: user.email,
+        password: user.password,
+    };
 
     let client = reqwest::Client::default();
-    let response = client.post("http://127.0.0.1:8000/api/register")
+    let response = client
+        .post("http://127.0.0.1:8000/api/register")
         .json(&request_body)
         .send()
         .await
@@ -57,12 +63,23 @@ async fn login_with_username_succeeds() {
     let database = spawn_server().await;
 
     let user = User::random();
-    queries::register_user(&database.connection, &user.username, &user.email, &user.password).await.expect("user persisting failed");
+    queries::register_user(
+        &database.connection,
+        &user.username,
+        &user.email,
+        &user.password,
+    )
+    .await
+    .expect("user persisting failed");
 
-    let request_body = LoginBody { identifier: user.username, password: user.password };
+    let request_body = LoginBody {
+        identifier: user.username,
+        password: user.password,
+    };
 
     let client = reqwest::Client::default();
-    let response = client.post("http://127.0.0.1:8000/api/login")
+    let response = client
+        .post("http://127.0.0.1:8000/api/login")
         .json(&request_body)
         .send()
         .await
@@ -79,12 +96,23 @@ async fn login_with_email_succeeds() {
     let database = spawn_server().await;
 
     let user = User::random();
-    queries::register_user(&database.connection, &user.username, &user.email, &user.password).await.expect("user persisting failed");
+    queries::register_user(
+        &database.connection,
+        &user.username,
+        &user.email,
+        &user.password,
+    )
+    .await
+    .expect("user persisting failed");
 
-    let request_body = LoginBody { identifier: user.email, password: user.password };
+    let request_body = LoginBody {
+        identifier: user.email,
+        password: user.password,
+    };
 
     let client = reqwest::Client::default();
-    let response = client.post("http://127.0.0.1:8000/api/login")
+    let response = client
+        .post("http://127.0.0.1:8000/api/login")
         .json(&request_body)
         .send()
         .await
@@ -99,9 +127,15 @@ async fn login_with_email_succeeds() {
 async fn spawn_server() -> Database {
     let mut config = Config::read().unwrap();
 
-    config.database_name = thread_rng().sample_iter(&Alphanumeric).take(32).map(|x| x as char).collect();
+    config.database_name = thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(32)
+        .map(|x| x as char)
+        .collect();
 
-    let server = server::setup(&config).await.expect("server initialization failed");
+    let server = server::setup(&config)
+        .await
+        .expect("server initialization failed");
 
     let database = server.database();
     tokio::spawn(server.serve());
@@ -129,7 +163,6 @@ impl Database {
         // We need to close the connection or some changes are not flushed
         // Possibly not important as we will be deleting those files
         self.connection.close().await;
-        
 
         // Cleanup files SQLite files created for this test
         std::env::current_dir()
@@ -138,7 +171,9 @@ impl Database {
             .flatten() // Removes the previously introduced Iterator and gives us the Iterator<Item=Result<DirEntry>> inside ReadDir
             .flatten() // Removes the Results so the iterator becomes Iterator<Item=DirEntry>
             .filter(|f| f.file_name().to_string_lossy().contains(&self.name))
-            .for_each(|f| { let _ = std::fs::remove_file(f.path()); });
+            .for_each(|f| {
+                let _ = std::fs::remove_file(f.path());
+            });
     }
 }
 

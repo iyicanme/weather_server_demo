@@ -36,7 +36,14 @@ impl Api {
 
     #[oai(path = "/register", method = "post")]
     pub async fn register(&self, body: Json<RegisterBody>) -> RegisterResponse {
-        let user_id = match queries::register_user(&self.database, &body.username, &body.email, &body.password).await {
+        let user_id = match queries::register_user(
+            &self.database,
+            &body.username,
+            &body.email,
+            &body.password,
+        )
+        .await
+        {
             Ok(i) => i,
             Err(SqlError::UniqueConstraintViolation) => return RegisterResponse::AlreadyRegistered,
             Err(SqlError::Other) => return RegisterResponse::RegistrationFailed,
@@ -47,7 +54,9 @@ impl Api {
 
     #[oai(path = "/login", method = "post")]
     pub async fn login(&self, body: Json<LoginBody>) -> LoginResponse {
-        let password = queries::get_password(&self.database, &body.identifier, &body.identifier).await.unwrap_or_else(|_| String::new());
+        let password = queries::get_password(&self.database, &body.identifier, &body.identifier)
+            .await
+            .unwrap_or_else(|_| String::new());
 
         if password == body.password {
             LoginResponse::LoggedIn
@@ -60,23 +69,49 @@ impl Api {
     pub async fn weather(&self, ip: &RemoteAddr) -> WeatherResponse {
         let ip_string = match ip.as_socket_addr() {
             Some(addr) => addr.ip().to_string(),
-            None => return WeatherResponse::GeolocationQueryFailed(Json(ErrorMessage { message: "Could not obtain remote address".to_owned() })),
+            None => {
+                return WeatherResponse::GeolocationQueryFailed(Json(ErrorMessage {
+                    message: "Could not obtain remote address".to_owned(),
+                }))
+            }
         };
 
         let response = match self.http_client.get_coordinates_for_ip(&ip_string).await {
             Ok(r) => r,
-            Err(e) => return WeatherResponse::GeolocationQueryFailed(Json(ErrorMessage { message: e.to_string() }))
+            Err(e) => {
+                return WeatherResponse::GeolocationQueryFailed(Json(ErrorMessage {
+                    message: e.to_string(),
+                }))
+            }
         };
 
         let latitude = response.latitude;
         let longitude = response.longitude;
 
-        let WeatherApiResponse { temperature, feels_like, condition, last_updated } = match self.http_client.get_weather_for_coordinates(latitude, longitude).await {
+        let WeatherApiResponse {
+            temperature,
+            feels_like,
+            condition,
+            last_updated,
+        } = match self
+            .http_client
+            .get_weather_for_coordinates(latitude, longitude)
+            .await
+        {
             Ok(r) => r,
-            Err(e) => return WeatherResponse::WeatherQueryFailed(Json(ErrorMessage { message: e.to_string() }))
+            Err(e) => {
+                return WeatherResponse::WeatherQueryFailed(Json(ErrorMessage {
+                    message: e.to_string(),
+                }))
+            }
         };
 
-        let response_body = WeatherResponseBody { temperature, feels_like, condition, last_updated };
+        let response_body = WeatherResponseBody {
+            temperature,
+            feels_like,
+            condition,
+            last_updated,
+        };
 
         WeatherResponse::Success(Json(response_body))
     }

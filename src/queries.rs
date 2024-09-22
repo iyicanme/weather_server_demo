@@ -1,17 +1,22 @@
 use sqlx::error::ErrorKind;
 use sqlx::{Executor, Row, SqlitePool};
 
-pub async fn register_user(database: &SqlitePool, username: &str, email: &str, password: &str) -> Result<u64, SqlError> {
+pub async fn register_user(
+    database: &SqlitePool,
+    username: &str,
+    email: &str,
+    password: &str,
+) -> Result<u64, SqlError> {
     let query = sqlx::query!(
         r#"
             INSERT INTO user (id, username, email, password)
             VALUES (NULL, $1, $2, $3)
             RETURNING id
         "#,
-            username,
-            email,
-            password
-        );
+        username,
+        email,
+        password
+    );
 
     let row = database.fetch_one(query).await.map_err(SqlError::from)?;
     let user_id = row.get::<u64, &str>("id");
@@ -19,7 +24,11 @@ pub async fn register_user(database: &SqlitePool, username: &str, email: &str, p
     Ok(user_id)
 }
 
-pub async fn get_password(database: &SqlitePool, username: &str, email: &str) -> Result<String, SqlError> {
+pub async fn get_password(
+    database: &SqlitePool,
+    username: &str,
+    email: &str,
+) -> Result<String, SqlError> {
     let query = sqlx::query!(
         r#"
             SELECT password
@@ -44,7 +53,10 @@ pub enum SqlError {
 
 impl From<sqlx::Error> for SqlError {
     fn from(value: sqlx::Error) -> Self {
-        let Some(is_unique_violation) = value.as_database_error().map(|e| e.kind() == ErrorKind::UniqueViolation) else {
+        let Some(is_unique_violation) = value
+            .as_database_error()
+            .map(|e| e.kind() == ErrorKind::UniqueViolation)
+        else {
             return Self::Other;
         };
 

@@ -16,11 +16,19 @@ impl HttpClient {
 
     #[must_use]
     pub fn new(weather_api_key: &str) -> Self {
-        Self::new_with_hosts(weather_api_key, Self::GEOLOCATION_API_HOST, Self::WEATHER_API_HOST)
+        Self::new_with_hosts(
+            weather_api_key,
+            Self::GEOLOCATION_API_HOST,
+            Self::WEATHER_API_HOST,
+        )
     }
 
     #[must_use]
-    pub fn new_with_hosts(weather_api_key: &str, geolocation_api_host: &str, weather_api_host: &str) -> Self {
+    pub fn new_with_hosts(
+        weather_api_key: &str,
+        geolocation_api_host: &str,
+        weather_api_host: &str,
+    ) -> Self {
         Self {
             client: reqwest::Client::default(),
             weather_api_key: weather_api_key.to_owned(),
@@ -32,26 +40,35 @@ impl HttpClient {
     pub async fn get_coordinates_for_ip(&self, ip: &str) -> Result<GeolocationApiResponse, Error> {
         let url = format!("{}/{ip}/latlong/", self.geolocation_api_host);
 
-        let response = self.client.get(url)
+        let response = self
+            .client
+            .get(url)
             .send()
             .await
             .map_err(|_| Error::RequestFailed)?;
 
         let status_code = response.status();
         if status_code != StatusCode::OK {
-            return Err(Error::ApiInternalError(format!("API returned {status_code}")));
+            return Err(Error::ApiInternalError(format!(
+                "API returned {status_code}"
+            )));
         }
 
-        let response = response.text()
-            .await
-            .map_err(|_| Error::RequestFailed)?;
+        let response = response.text().await.map_err(|_| Error::RequestFailed)?;
 
         let coordinate = Coordinate::from_str(&response)?;
 
-        Ok(GeolocationApiResponse { latitude: coordinate.latitude, longitude: coordinate.longitude })
+        Ok(GeolocationApiResponse {
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude,
+        })
     }
 
-    pub async fn get_weather_for_coordinates(&self, latitude: f64, longitude: f64) -> Result<WeatherApiResponse, Error> {
+    pub async fn get_weather_for_coordinates(
+        &self,
+        latitude: f64,
+        longitude: f64,
+    ) -> Result<WeatherApiResponse, Error> {
         let url = format!("{}/v1/current.json", self.weather_api_host);
 
         let mut query_parameters = HashMap::new();
@@ -59,7 +76,9 @@ impl HttpClient {
         query_parameters.insert("q", location_query);
         query_parameters.insert("key", self.weather_api_key.clone());
 
-        let response = self.client.get(url)
+        let response = self
+            .client
+            .get(url)
             .query(&query_parameters)
             .send()
             .await
@@ -111,13 +130,16 @@ impl FromStr for Coordinate {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let Some((latitude, longitude)) = s.split_once(',') else {
-            return Err(Error::ParsingFailed)
+            return Err(Error::ParsingFailed);
         };
 
         let latitude = latitude.parse().map_err(|_| Error::ParsingFailed)?;
         let longitude = longitude.parse().map_err(|_| Error::ParsingFailed)?;
 
-        let coordinate = Self { latitude, longitude };
+        let coordinate = Self {
+            latitude,
+            longitude,
+        };
 
         Ok(coordinate)
     }

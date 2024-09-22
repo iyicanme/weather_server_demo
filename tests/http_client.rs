@@ -4,8 +4,8 @@ use std::net::IpAddr;
 use std::str::FromStr;
 
 use rand::seq::IndexedRandom;
-use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 use wiremock::matchers::{method, path, path_regex};
+use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
 use weather_server_lib::config::Config;
 use weather_server_lib::http_client::{Coordinate, HttpClient, WeatherApiResponse};
@@ -31,10 +31,17 @@ async fn geolocation_api_succeeds_for_non_loopback_ip() {
         .mount(&mock_server)
         .await;
 
-    let host = format!("http://{}:{}", mock_server.address().ip(), mock_server.address().port());
+    let host = format!(
+        "http://{}:{}",
+        mock_server.address().ip(),
+        mock_server.address().port()
+    );
     let client = HttpClient::new_with_hosts(&config.weather_api_key, &host, &host);
 
-    let response = client.get_coordinates_for_ip("176.12.12.12").await.expect("request to API failed");
+    let response = client
+        .get_coordinates_for_ip("176.12.12.12")
+        .await
+        .expect("request to API failed");
 
     assert!(response.latitude - latitude < 0.000_000_001);
     assert!(response.longitude - longitude < 0.000_000_001);
@@ -55,7 +62,8 @@ impl Respond for GeolocationResponder {
             return ResponseTemplate::new(400);
         };
 
-        let loopback_v4 = IpAddr::from_str("127.0.0.1").expect("should be valid IPv4 loopback address");
+        let loopback_v4 =
+            IpAddr::from_str("127.0.0.1").expect("should be valid IPv4 loopback address");
         let loopback_v6 = IpAddr::from_str("::1").expect("should be valid IPv6 loopback address");
         if ip.eq(&loopback_v4) || ip.eq(&loopback_v6) {
             return ResponseTemplate::new(200).set_body_string("Undefined,Undefined");
@@ -75,7 +83,10 @@ async fn weather_api_succeeds() {
 
     let temperature = rand::random();
     let feels_like = rand::random();
-    let condition = (*["Sunny", "Cloudy", "Rainy", "Snowy"].choose(&mut rand::thread_rng()).unwrap()).to_owned();
+    let condition = (*["Sunny", "Cloudy", "Rainy", "Snowy"]
+        .choose(&mut rand::thread_rng())
+        .unwrap())
+    .to_owned();
 
     let responder = WeatherResponder {
         temperature,
@@ -90,10 +101,17 @@ async fn weather_api_succeeds() {
         .mount(&mock_server)
         .await;
 
-    let host = format!("http://{}:{}", mock_server.address().ip(), mock_server.address().port());
+    let host = format!(
+        "http://{}:{}",
+        mock_server.address().ip(),
+        mock_server.address().port()
+    );
     let client = HttpClient::new_with_hosts(&config.weather_api_key, &host, &host);
 
-    let response = client.get_weather_for_coordinates(45.0, 45.0).await.expect("request to server failed");
+    let response = client
+        .get_weather_for_coordinates(45.0, 45.0)
+        .await
+        .expect("request to server failed");
 
     assert!(response.temperature - temperature < 0.000_000_001);
     assert!(response.feels_like - feels_like < 0.000_000_001);
@@ -108,7 +126,10 @@ struct WeatherResponder {
 
 impl Respond for WeatherResponder {
     fn respond(&self, request: &Request) -> ResponseTemplate {
-        let queries = request.url.query_pairs().collect::<HashMap<Cow<str>, Cow<str>>>();
+        let queries = request
+            .url
+            .query_pairs()
+            .collect::<HashMap<Cow<str>, Cow<str>>>();
 
         if !queries.contains_key("key") {
             return ResponseTemplate::new(400);

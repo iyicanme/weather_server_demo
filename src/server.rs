@@ -23,7 +23,11 @@ pub async fn setup(config: &Config) -> Result<PendingServer, anyhow::Error> {
     let address = format!("0.0.0.0:{}", config.port);
     let listener = TcpListener::bind(address);
 
-    Ok(PendingServer { listener, routes, database })
+    Ok(PendingServer {
+        listener,
+        routes,
+        database,
+    })
 }
 
 pub struct PendingServer {
@@ -46,7 +50,9 @@ impl PendingServer {
 async fn database(database_name: &str) -> Result<SqlitePool, sqlx::Error> {
     let database_url = format!("sqlite://{database_name}.db");
 
-    let database_exists = Sqlite::database_exists(&database_url).await.unwrap_or(false);
+    let database_exists = Sqlite::database_exists(&database_url)
+        .await
+        .unwrap_or(false);
     if !database_exists {
         Sqlite::create_database(&database_url).await?;
     }
