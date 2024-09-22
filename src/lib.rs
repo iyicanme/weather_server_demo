@@ -1,16 +1,15 @@
 use std::fmt::{Display, Formatter};
 
-use poem::web::RemoteAddr;
-use poem_openapi::payload::Json;
-use poem_openapi::{ApiResponse, Enum, Object, OpenApi};
-use sqlx::SqlitePool;
-
 use crate::http_client::{HttpClient, WeatherApiResponse};
 use crate::queries::SqlError;
+use poem::web::RemoteAddr;
+use poem_openapi::payload::Json;
+use poem_openapi::{ApiResponse, Object, OpenApi};
+use sqlx::SqlitePool;
 
 pub mod config;
 pub mod http_client;
-mod queries;
+pub mod queries;
 pub mod server;
 
 pub struct Api {
@@ -38,7 +37,7 @@ impl Api {
     #[oai(path = "/register", method = "post")]
     pub async fn register(&self, body: Json<RegisterBody>) -> RegisterResponse {
         let user_id = match queries::register_user(&self.database, &body.username, &body.email, &body.password).await {
-            Ok(user_id) => user_id,
+            Ok(i) => i,
             Err(SqlError::UniqueConstraintViolation) => return RegisterResponse::AlreadyRegistered,
             Err(SqlError::Other) => return RegisterResponse::RegistrationFailed,
         };
@@ -48,7 +47,13 @@ impl Api {
 
     #[oai(path = "/login", method = "post")]
     pub async fn login(&self, body: Json<LoginBody>) -> LoginResponse {
-        LoginResponse::LoggedIn
+        let password = queries::get_password(&self.database, &body.identifier, &body.identifier).await.unwrap_or_else(|_| String::new());
+
+        if password == body.password {
+            LoginResponse::LoggedIn
+        } else {
+            LoginResponse::WrongCredentials
+        }
     }
 
     #[oai(path = "/weather", method = "get")]
@@ -84,8 +89,11 @@ pub struct RegisterBody {
     pub password: String,
 }
 
-#[derive(Object)]
-pub struct LoginBody {}
+#[derive(serde::Serialize, Object)]
+pub struct LoginBody {
+    pub identifier: String,
+    pub password: String,
+}
 
 #[derive(ApiResponse)]
 pub enum HealthResponse {

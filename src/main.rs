@@ -1,3 +1,4 @@
+use weather_server_lib::config::Config;
 use weather_server_lib::server;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -10,6 +11,8 @@ async fn main() {
     
     tracing_subscriber::fmt::init();
 
-    let server = server::setup().await.expect("server initialization failed");
+    let config = Config::read().expect("could not read config");
+
+    let server = server::setup(&config).await.expect("server initialization failed");
     server.serve().await.expect("server execution interrupted");
 }

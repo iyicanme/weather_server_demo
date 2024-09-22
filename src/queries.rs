@@ -1,4 +1,4 @@
-use sqlx::error::{ ErrorKind};
+use sqlx::error::ErrorKind;
 use sqlx::{Executor, Row, SqlitePool};
 
 pub async fn register_user(database: &SqlitePool, username: &str, email: &str, password: &str) -> Result<u64, SqlError> {
@@ -19,6 +19,24 @@ pub async fn register_user(database: &SqlitePool, username: &str, email: &str, p
     Ok(user_id)
 }
 
+pub async fn get_password(database: &SqlitePool, username: &str, email: &str) -> Result<String, SqlError> {
+    let query = sqlx::query!(
+        r#"
+            SELECT password
+            FROM user
+            WHERE username = ? OR email = ?
+        "#,
+        username,
+        email
+    );
+
+    let row = database.fetch_one(query).await.map_err(SqlError::from)?;
+    let password = row.get::<String, &str>("password");
+
+    Ok(password)
+}
+
+#[derive(Debug)]
 pub enum SqlError {
     UniqueConstraintViolation,
     Other, // Wrap sqlx::Error inside if more context is needed
