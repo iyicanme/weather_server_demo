@@ -12,10 +12,13 @@ path = "src/main.rs"
 name = "weather_server_demo"
 
 [dependencies]
+anyhow = "1.0"
+fake = "2.9"
 poem = { version = "3.1", features = ["session"] }
 poem-openapi = { version = "5.1", features = ["swagger-ui"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots"] }
 serde = "1.0"
+serial_test = "3.1"
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio-rustls"] }
 thiserror = "1.0"
 tokio = { version = "1.40", features = ["macros", "rt-multi-thread"] }

@@ -9,6 +9,7 @@ use crate::http_client::{HttpClient, WeatherApiResponse};
 
 pub mod config;
 pub mod http_client;
+pub mod server;
 
 pub struct Api {
     http_client: HttpClient,
@@ -27,9 +28,14 @@ impl Api {
 
 #[OpenApi]
 impl Api {
+    #[oai(path = "/health_check", method = "get")]
+    pub async fn health_check(&self) -> HealthResponse {
+        HealthResponse::Alive
+    }
+
     #[oai(path = "/register", method = "post")]
     pub async fn register(&self, body: Json<RegisterBody>) -> RegisterResponse {
-        RegisterResponse::UserCreated
+        RegisterResponse::UserCreated(Json(RegisterResponseBody { user_id: 0 }))
     }
 
     #[oai(path = "/login", method = "post")]
@@ -63,22 +69,33 @@ impl Api {
     }
 }
 
-#[derive(Object)]
+#[derive(serde::Serialize, Object)]
 pub struct RegisterBody {
-    username: String,
-    email: String,
-    password: String,
+    pub username: String,
+    pub email: String,
+    pub password: String,
 }
 
 #[derive(Object)]
 pub struct LoginBody {}
 
 #[derive(ApiResponse)]
+pub enum HealthResponse {
+    #[oai(status = 200)]
+    Alive,
+}
+
+#[derive(ApiResponse)]
 pub enum RegisterResponse {
     #[oai(status = 201)]
-    UserCreated,
+    UserCreated(Json<RegisterResponseBody>),
     #[oai(status = 409)]
     AlreadyRegistered,
+}
+
+#[derive(serde::Deserialize, Object)]
+pub struct RegisterResponseBody {
+    pub user_id: u64,
 }
 
 #[derive(ApiResponse)]
@@ -99,7 +116,7 @@ pub enum WeatherResponse {
     WeatherQueryFailed(Json<ErrorMessage>),
 }
 
-#[derive(Object)]
+#[derive(serde::Deserialize, Object)]
 pub struct WeatherResponseBody {
     temperature: f64,
     feels_like: f64,

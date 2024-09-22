@@ -1,49 +1,15 @@
-use poem::{Route, Server};
-use poem::listener::TcpListener;
-use poem_openapi::OpenApiService;
-use sqlx::{Sqlite, SqlitePool};
-use sqlx::migrate::MigrateDatabase;
-use tracing::log::{Level, log};
+use weather_server_lib::server;
 
-use weather_server_lib::Api;
-use weather_server_lib::config::Config;
-use weather_server_lib::http_client::HttpClient;
-
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() {
     if std::env::var_os("RUST_LOG").is_none() {
         unsafe {
             std::env::set_var("RUST_LOG", "poem=debug");
         }
     }
-
+    
     tracing_subscriber::fmt::init();
 
-    let config = Config::read().unwrap();
-
-    let database_url = format!("sqlite://{}", config.database_name);
-    if Sqlite::database_exists(&database_url).await.unwrap_or(false) {
-        log!(Level::Info, "Database found");
-    } else {
-        log!(Level::Warn, "Database is missing! Creating database");
-        Sqlite::create_database(&database_url)
-            .await
-            .expect("Database creation failed. Can not proceed without a database");
-        log!(Level::Info, "Database created");
-    }
-
-    let database = SqlitePool::connect(&database_url).await.expect("database connection failed");
-
-    let http_client = HttpClient::new(&config.weather_api_key);
-    let api = Api::new(http_client, database);
-
-    let api_service =
-        OpenApiService::new(api, "Weather Server Demo", "1.0").server("http://localhost:3000/api");
-    let ui = api_service.swagger_ui();
-
-    let routes = Route::new().nest("/api", api_service).nest("/", ui);
-
-    Server::new(TcpListener::bind(format!("0.0.0.0:{}", config.port)))
-        .run(routes)
-        .await.expect("server error");
+    let server = server::setup().await.expect("server initialization failed");
+    server.serve().await.expect("server execution interrupted");
 }
