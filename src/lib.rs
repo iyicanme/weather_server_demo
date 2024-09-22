@@ -1,14 +1,16 @@
 use std::fmt::{Display, Formatter};
 
 use poem::web::RemoteAddr;
-use poem_openapi::{ApiResponse, Object, OpenApi};
 use poem_openapi::payload::Json;
+use poem_openapi::{ApiResponse, Enum, Object, OpenApi};
 use sqlx::SqlitePool;
 
 use crate::http_client::{HttpClient, WeatherApiResponse};
+use crate::queries::SqlError;
 
 pub mod config;
 pub mod http_client;
+mod queries;
 pub mod server;
 
 pub struct Api {
@@ -35,7 +37,13 @@ impl Api {
 
     #[oai(path = "/register", method = "post")]
     pub async fn register(&self, body: Json<RegisterBody>) -> RegisterResponse {
-        RegisterResponse::UserCreated(Json(RegisterResponseBody { user_id: 0 }))
+        let user_id = match queries::register_user(&self.database, &body.username, &body.email, &body.password).await {
+            Ok(user_id) => user_id,
+            Err(SqlError::UniqueConstraintViolation) => return RegisterResponse::AlreadyRegistered,
+            Err(SqlError::Other) => return RegisterResponse::RegistrationFailed,
+        };
+
+        RegisterResponse::Registered(Json(RegisterResponseBody { user_id }))
     }
 
     #[oai(path = "/login", method = "post")]
@@ -88,9 +96,11 @@ pub enum HealthResponse {
 #[derive(ApiResponse)]
 pub enum RegisterResponse {
     #[oai(status = 201)]
-    UserCreated(Json<RegisterResponseBody>),
+    Registered(Json<RegisterResponseBody>),
     #[oai(status = 409)]
     AlreadyRegistered,
+    #[oai(status = 500)]
+    RegistrationFailed,
 }
 
 #[derive(serde::Deserialize, Object)]

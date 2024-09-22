@@ -1,13 +1,12 @@
 use poem::listener::TcpListener;
 use poem::{Route, Server};
 use poem_openapi::OpenApiService;
-use sqlx::{Sqlite, SqlitePool};
 use sqlx::migrate::MigrateDatabase;
-use tracing::log::{Level, log};
+use sqlx::{Sqlite, SqlitePool};
 
-use crate::Api;
 use crate::config::Config;
 use crate::http_client::HttpClient;
+use crate::Api;
 
 pub async fn setup() -> Result<PendingServer, anyhow::Error> {
     let config = Config::read().unwrap();
@@ -41,16 +40,15 @@ impl PendingServer {
 }
 
 async fn database(database_name: &str) -> Result<SqlitePool, sqlx::Error> {
-    let database_url = format!("sqlite://{}", database_name);
-    if Sqlite::database_exists(&database_url).await.unwrap_or(false) {
-        log!(Level::Info, "Database found");
-    } else {
-        log!(Level::Warn, "Database is missing! Creating database");
-        Sqlite::create_database(&database_url)
-            .await
-            .expect("Database creation failed. Can not proceed without a database");
-        log!(Level::Info, "Database created");
+    let database_url = format!("sqlite://{database_name}");
+
+    let database_exists = Sqlite::database_exists(&database_url).await.unwrap_or(false);
+    if !database_exists {
+        Sqlite::create_database(&database_url).await?;
     }
 
-    SqlitePool::connect(&database_url).await
+    let database = SqlitePool::connect(&database_url).await?;
+    sqlx::migrate!("./migrations").run(&database).await?;
+
+    Ok(database)
 }

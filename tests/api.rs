@@ -3,7 +3,7 @@ use std::time::Duration;
 use fake::Fake;
 use reqwest::StatusCode;
 
-use weather_server_lib::{RegisterBody, RegisterResponse, RegisterResponseBody, server};
+use weather_server_lib::{server, RegisterBody, RegisterResponseBody};
 
 async fn spawn_server() {
     let server = server::setup().await.expect("server initialization failed");
