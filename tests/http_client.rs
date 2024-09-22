@@ -8,7 +8,10 @@ use wiremock::matchers::{method, path, path_regex};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
 use weather_server_lib::config::Config;
-use weather_server_lib::http_client::{Coordinate, HttpClient, WeatherApiResponse};
+use weather_server_lib::http_client::{
+    Condition, Coordinate, Current, HttpClient, Location, WeatherApiResponse,
+};
+use weather_server_lib::is_loopback_address;
 
 #[tokio::test]
 async fn geolocation_api_succeeds_for_non_loopback_ip() {
@@ -62,10 +65,7 @@ impl Respond for GeolocationResponder {
             return ResponseTemplate::new(400);
         };
 
-        let loopback_v4 =
-            IpAddr::from_str("127.0.0.1").expect("should be valid IPv4 loopback address");
-        let loopback_v6 = IpAddr::from_str("::1").expect("should be valid IPv6 loopback address");
-        if ip.eq(&loopback_v4) || ip.eq(&loopback_v6) {
+        if is_loopback_address(&ip) {
             return ResponseTemplate::new(200).set_body_string("Undefined,Undefined");
         }
 
@@ -113,9 +113,9 @@ async fn weather_api_succeeds() {
         .await
         .expect("request to server failed");
 
-    assert!(response.temperature - temperature < 0.000_000_001);
-    assert!(response.feels_like - feels_like < 0.000_000_001);
-    assert_eq!(response.condition, condition);
+    assert!(response.current.temp_c - temperature < 0.000_000_001);
+    assert!(response.current.feelslike_c - feels_like < 0.000_000_001);
+    assert_eq!(response.current.condition.text, condition);
 }
 
 struct WeatherResponder {
@@ -144,10 +144,15 @@ impl Respond for WeatherResponder {
         }
 
         let response = WeatherApiResponse {
-            temperature: self.temperature,
-            feels_like: self.feels_like,
-            condition: self.condition.clone(),
-            last_updated: "2024-01-01 00:00".to_owned(),
+            location: Location,
+            current: Current {
+                last_updated: String::new(),
+                temp_c: self.temperature,
+                condition: Condition {
+                    text: self.condition.clone(),
+                },
+                feelslike_c: self.feels_like,
+            },
         };
 
         ResponseTemplate::new(200).set_body_json(response)

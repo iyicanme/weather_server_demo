@@ -6,7 +6,9 @@ use rand::{thread_rng, Rng};
 use reqwest::StatusCode;
 use sqlx::SqlitePool;
 use weather_server_lib::config::Config;
-use weather_server_lib::{queries, server, LoginBody, RegisterBody, RegisterResponseBody};
+use weather_server_lib::{
+    queries, server, LoginBody, RegisterBody, RegisterResponseBody, WeatherResponseBody,
+};
 
 #[tokio::test]
 #[serial_test::serial]
@@ -14,7 +16,7 @@ async fn health_check_succeeds() {
     let database = spawn_server().await;
 
     let client = reqwest::Client::default();
-     let response = client
+    let response = client
         .get("http://127.0.0.1:8000/api/health_check")
         .send()
         .await
@@ -119,6 +121,58 @@ async fn login_with_email_succeeds() {
         .expect("registration request failed");
 
     assert_eq!(response.status(), StatusCode::OK);
+
+    database.close().await;
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn get_weather_with_logged_in_user_succeeds() {
+    let database = spawn_server().await;
+
+    let user = User::random();
+    queries::register_user(
+        &database.connection,
+        &user.username,
+        &user.email,
+        &user.password,
+    )
+    .await
+    .expect("user persisting failed");
+
+    let request_body = LoginBody {
+        identifier: user.email,
+        password: user.password,
+    };
+
+    let client = reqwest::Client::default();
+    let response = client
+        .post("http://127.0.0.1:8000/api/login")
+        .json(&request_body)
+        .send()
+        .await
+        .expect("registration request failed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = client
+        .get("http://127.0.0.1:8000/api/weather")
+        .send()
+        .await
+        .expect("weather request failed");
+
+    if !response.status().is_success() {
+        let response = response
+            .text()
+            .await
+            .expect("could not obtain error message");
+        panic!("{response}");
+    }
+
+    let _ = response
+        .json::<WeatherResponseBody>()
+        .await
+        .expect("could not obtain weather data");
 
     database.close().await;
 }

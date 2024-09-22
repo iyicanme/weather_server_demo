@@ -1,11 +1,13 @@
-use std::fmt::{Display, Formatter};
-
-use crate::http_client::{HttpClient, WeatherApiResponse};
+use crate::http_client::HttpClient;
 use crate::queries::SqlError;
 use poem::web::RemoteAddr;
 use poem_openapi::payload::Json;
 use poem_openapi::{ApiResponse, Object, OpenApi};
+use rand::{thread_rng, Rng};
 use sqlx::SqlitePool;
+use std::fmt::{Display, Formatter};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::str::FromStr;
 
 pub mod config;
 pub mod http_client;
@@ -68,7 +70,7 @@ impl Api {
     #[oai(path = "/weather", method = "get")]
     pub async fn weather(&self, ip: &RemoteAddr) -> WeatherResponse {
         let ip_string = match ip.as_socket_addr() {
-            Some(addr) => addr.ip().to_string(),
+            Some(addr) => get_ip_string(addr),
             None => {
                 return WeatherResponse::GeolocationQueryFailed(Json(ErrorMessage {
                     message: "Could not obtain remote address".to_owned(),
@@ -85,17 +87,9 @@ impl Api {
             }
         };
 
-        let latitude = response.latitude;
-        let longitude = response.longitude;
-
-        let WeatherApiResponse {
-            temperature,
-            feels_like,
-            condition,
-            last_updated,
-        } = match self
+        let response = match self
             .http_client
-            .get_weather_for_coordinates(latitude, longitude)
+            .get_weather_for_coordinates(response.latitude, response.longitude)
             .await
         {
             Ok(r) => r,
@@ -107,10 +101,10 @@ impl Api {
         };
 
         let response_body = WeatherResponseBody {
-            temperature,
-            feels_like,
-            condition,
-            last_updated,
+            temperature: response.current.temp_c,
+            feels_like: response.current.feelslike_c,
+            condition: response.current.condition.text,
+            last_updated: response.current.last_updated,
         };
 
         WeatherResponse::Success(Json(response_body))
@@ -186,4 +180,38 @@ impl Display for ErrorMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.message)
     }
+}
+
+#[cfg(not(feature = "integration-test"))]
+fn get_ip_string(address: &SocketAddr) -> String {
+    address.ip().to_string()
+}
+
+// In tests, clients are always local, so IP address is always loopback
+// The API we are using does not like that, so we make up an IP
+#[cfg(feature = "integration-test")]
+fn get_ip_string(address: &SocketAddr) -> String {
+    let mut ip = address.ip();
+
+    if is_loopback_address(&ip) {
+        const IP_BLOCK_SIZE: u32 = 2_097_152;
+        let range_start = [78u8, 160u8, 0u8, 0u8];
+        let offset: [u8; 4] = thread_rng().gen_range(0..IP_BLOCK_SIZE).to_be_bytes();
+
+        ip = IpAddr::V4(Ipv4Addr::new(
+            range_start[0] + offset[0],
+            range_start[1] + offset[1],
+            range_start[2] + offset[2],
+            range_start[3] + offset[3],
+        ));
+    }
+
+    ip.to_string()
+}
+
+pub fn is_loopback_address(ip: &IpAddr) -> bool {
+    let loopback_v4 = IpAddr::from_str("127.0.0.1").expect("should be valid IPv4 loopback address");
+    let loopback_v6 = IpAddr::from_str("::1").expect("should be valid IPv6 loopback address");
+
+    ip.eq(&loopback_v4) || ip.eq(&loopback_v6)
 }

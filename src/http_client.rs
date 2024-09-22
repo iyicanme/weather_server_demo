@@ -55,13 +55,14 @@ impl HttpClient {
         }
 
         let response = response.text().await.map_err(|_| Error::RequestFailed)?;
-
         let coordinate = Coordinate::from_str(&response)?;
 
-        Ok(GeolocationApiResponse {
+        let response = GeolocationApiResponse {
             latitude: coordinate.latitude,
             longitude: coordinate.longitude,
-        })
+        };
+
+        Ok(response)
     }
 
     pub async fn get_weather_for_coordinates(
@@ -76,8 +77,7 @@ impl HttpClient {
         query_parameters.insert("q", location_query);
         query_parameters.insert("key", self.weather_api_key.clone());
 
-        let response = self
-            .client
+        self.client
             .get(url)
             .query(&query_parameters)
             .send()
@@ -85,9 +85,7 @@ impl HttpClient {
             .map_err(|_| Error::RequestFailed)?
             .json::<WeatherApiResponse>()
             .await
-            .map_err(|_| Error::JsonParsingFailed)?;
-
-        Ok(response)
+            .map_err(|_| Error::JsonParsingFailed)
     }
 }
 
@@ -99,13 +97,26 @@ pub struct GeolocationApiResponse {
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct WeatherApiResponse {
-    #[serde(rename = "temp_c")]
-    pub temperature: f64,
-    #[serde(rename = "feelslike_c")]
-    pub feels_like: f64,
-    #[serde(rename = "text")]
-    pub condition: String,
+    #[serde(skip)]
+    pub location: Location,
+    pub current: Current,
+}
+
+// We need a dummy location struct so we can tell serde to skip de/serialize it
+#[derive(Default)]
+pub struct Location;
+
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct Current {
     pub last_updated: String,
+    pub temp_c: f64,
+    pub condition: Condition,
+    pub feelslike_c: f64,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct Condition {
+    pub text: String,
 }
 
 #[derive(Debug, thiserror::Error)]
