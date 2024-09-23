@@ -5,10 +5,9 @@ use rand::distr::Alphanumeric;
 use rand::{thread_rng, Rng};
 use reqwest::StatusCode;
 use sqlx::SqlitePool;
+use weather_server_lib::api::{LoginBody, RegisterBody, RegisterResponseBody, WeatherResponseBody};
 use weather_server_lib::config::Config;
-use weather_server_lib::{
-    queries, server, LoginBody, RegisterBody, RegisterResponseBody, WeatherResponseBody,
-};
+use weather_server_lib::queries;
 
 #[tokio::test]
 #[serial_test::serial]
@@ -187,7 +186,7 @@ async fn spawn_server() -> Database {
         .map(|x| x as char)
         .collect();
 
-    let server = server::setup(&config)
+    let server = weather_server_lib::setup(&config)
         .await
         .expect("server initialization failed");
 
