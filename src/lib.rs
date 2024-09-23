@@ -3,11 +3,13 @@ use crate::queries::SqlError;
 use poem::web::RemoteAddr;
 use poem_openapi::payload::Json;
 use poem_openapi::{ApiResponse, Object, OpenApi};
-use rand::{thread_rng, Rng};
 use sqlx::SqlitePool;
 use std::fmt::{Display, Formatter};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
+
+#[cfg(feature = "integration-test")]
+use {rand::{Rng, thread_rng}, std::net::Ipv4Addr};
 
 pub mod config;
 pub mod http_client;
