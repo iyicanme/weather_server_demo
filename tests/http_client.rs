@@ -7,7 +7,6 @@ use rand::seq::IndexedRandom;
 use wiremock::matchers::{method, path, path_regex};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
-use weather_server_lib::config::Config;
 use weather_server_lib::http_client::{
     Condition, Coordinate, Current, HttpClient, Location, WeatherApiResponse,
 };
@@ -15,8 +14,6 @@ use weather_server_lib::is_loopback_address;
 
 #[tokio::test]
 async fn geolocation_api_succeeds_for_non_loopback_ip() {
-    let config = Config::read().expect("could not read config");
-
     let mock_server = MockServer::start().await;
 
     let latitude = rand::random();
@@ -77,8 +74,6 @@ impl Respond for GeolocationResponder {
 
 #[tokio::test]
 async fn weather_api_succeeds() {
-    let config = Config::read().expect("could not read config");
-
     let mock_server = MockServer::start().await;
 
     let temperature = rand::random();

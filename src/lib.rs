@@ -60,7 +60,7 @@ impl PendingServer {
 }
 
 async fn database(database_name: &str) -> Result<SqlitePool, sqlx::Error> {
-    let database_url = format!("sqlite://{database_name}.db");
+    let database_url = format!("sqlite://database/{database_name}.db");
 
     let database_exists = Sqlite::database_exists(&database_url)
         .await
