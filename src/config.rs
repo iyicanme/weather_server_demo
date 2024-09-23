@@ -4,7 +4,6 @@ use std::io::{BufReader, Read};
 #[derive(serde::Deserialize)]
 pub struct Config {
     pub port: u16,
-    pub weather_api_key: String,
     pub database_name: String,
 }
 

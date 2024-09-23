@@ -5,7 +5,7 @@ use rand::distr::Alphanumeric;
 use rand::{thread_rng, Rng};
 use reqwest::StatusCode;
 use sqlx::SqlitePool;
-use weather_server_lib::api::{LoginBody, RegisterBody, RegisterResponseBody, WeatherResponseBody};
+use weather_server_lib::api::{LoginBody, LoginResponseBody, RegisterBody, RegisterResponseBody, WeatherResponseBody};
 use weather_server_lib::config::Config;
 use weather_server_lib::queries;
 
@@ -154,8 +154,15 @@ async fn get_weather_with_logged_in_user_succeeds() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
+    let response = response
+        .json::<LoginResponseBody>()
+        .await
+        .expect("reading token failed");
+
+    let authorization = format!("Bearer {}", response.token);
     let response = client
         .get("http://127.0.0.1:8000/api/weather")
+        .header("Authorization", authorization)
         .send()
         .await
         .expect("weather request failed");

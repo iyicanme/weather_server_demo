@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::env::VarError;
 use std::str::FromStr;
 
 use reqwest::StatusCode;
@@ -15,9 +16,8 @@ impl HttpClient {
     const WEATHER_API_HOST: &'static str = "https://api.weatherapi.com";
 
     #[must_use]
-    pub fn new(weather_api_key: &str) -> Self {
+    pub fn new() -> Result<Self, VarError> {
         Self::new_with_hosts(
-            weather_api_key,
             Self::GEOLOCATION_API_HOST,
             Self::WEATHER_API_HOST,
         )
@@ -25,16 +25,18 @@ impl HttpClient {
 
     #[must_use]
     pub fn new_with_hosts(
-        weather_api_key: &str,
         geolocation_api_host: &str,
         weather_api_host: &str,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, VarError> {
+        let weather_api_key = std::env::var("WEATHER_API_KEY")?;
+        let client = Self {
             client: reqwest::Client::default(),
-            weather_api_key: weather_api_key.to_owned(),
+            weather_api_key,
             geolocation_api_host: geolocation_api_host.to_owned(),
             weather_api_host: weather_api_host.to_owned(),
-        }
+        };
+
+        Ok(client)
     }
 
     pub async fn get_coordinates_for_ip(&self, ip: &str) -> Result<GeolocationApiResponse, Error> {

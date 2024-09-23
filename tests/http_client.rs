@@ -39,7 +39,7 @@ async fn geolocation_api_succeeds_for_non_loopback_ip() {
         mock_server.address().ip(),
         mock_server.address().port()
     );
-    let client = HttpClient::new_with_hosts(&config.weather_api_key, &host, &host);
+    let client = HttpClient::new_with_hosts(&host, &host).expect("could not create HTTP client");
 
     let response = client
         .get_coordinates_for_ip("176.12.12.12")
@@ -106,7 +106,7 @@ async fn weather_api_succeeds() {
         mock_server.address().ip(),
         mock_server.address().port()
     );
-    let client = HttpClient::new_with_hosts(&config.weather_api_key, &host, &host);
+    let client = HttpClient::new_with_hosts(&host, &host).expect("could not create HTTP client");
 
     let response = client
         .get_weather_for_coordinates(45.0, 45.0)

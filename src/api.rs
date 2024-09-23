@@ -1,11 +1,11 @@
 use crate::http_client::HttpClient;
-use crate::queries;
 use crate::queries::SqlError;
+use crate::{check_token, create_token, queries};
 use poem::web::RemoteAddr;
+use poem_openapi::auth::Bearer;
 use poem_openapi::payload::Json;
-use poem_openapi::{ApiResponse, Object, OpenApi};
+use poem_openapi::{ApiResponse, Object, OpenApi, SecurityScheme};
 use sqlx::SqlitePool;
-use std::fmt::{Display, Formatter};
 use std::net::SocketAddr;
 
 #[cfg(feature = "integration-test")]
@@ -53,48 +53,41 @@ impl Api {
 
     #[oai(path = "/login", method = "post")]
     pub async fn login(&self, body: Json<LoginBody>) -> LoginResponse {
-        let password = queries::get_password(&self.database, &body.identifier, &body.identifier)
+        let (user_id, password) = queries::get_password(&self.database, &body.identifier, &body.identifier)
             .await
-            .unwrap_or_else(|_| String::new());
+            .unwrap_or_else(|_| (0u64, String::new()));
 
-        if password == body.password {
-            LoginResponse::LoggedIn
+        let password_match = password == body.password;
+
+        let Ok(token) = create_token(user_id) else {
+            return LoginResponse::CouldNotCreateToken
+        };
+
+        if password_match {
+            LoginResponse::LoggedIn(Json(LoginResponseBody { token }))
         } else {
             LoginResponse::WrongCredentials
         }
     }
 
     #[oai(path = "/weather", method = "get")]
-    pub async fn weather(&self, ip: &RemoteAddr) -> WeatherResponse {
+    pub async fn weather(&self, authorization: JwtAuthorization, ip: &RemoteAddr) -> WeatherResponse {
+        if !check_token(&authorization.0.token) {
+            return WeatherResponse::Unauthorized;
+        }
+
         let ip_string = match ip.as_socket_addr() {
             Some(addr) => get_ip_string(addr),
-            None => {
-                return WeatherResponse::GeolocationQueryFailed(Json(ErrorMessage {
-                    message: "Could not obtain remote address".to_owned(),
-                }))
-            }
+            None => return WeatherResponse::GeolocationQueryFailed,
+
         };
 
-        let response = match self.http_client.get_coordinates_for_ip(&ip_string).await {
-            Ok(r) => r,
-            Err(e) => {
-                return WeatherResponse::GeolocationQueryFailed(Json(ErrorMessage {
-                    message: e.to_string(),
-                }))
-            }
+        let Ok(response) = self.http_client.get_coordinates_for_ip(&ip_string).await else {
+            return WeatherResponse::GeolocationQueryFailed
         };
 
-        let response = match self
-            .http_client
-            .get_weather_for_coordinates(response.latitude, response.longitude)
-            .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                return WeatherResponse::WeatherQueryFailed(Json(ErrorMessage {
-                    message: e.to_string(),
-                }))
-            }
+        let Ok(response) = self.http_client.get_weather_for_coordinates(response.latitude, response.longitude).await else {
+            return WeatherResponse::WeatherQueryFailed
         };
 
         let response_body = WeatherResponseBody {
@@ -121,6 +114,10 @@ pub struct LoginBody {
     pub password: String,
 }
 
+#[derive(SecurityScheme)]
+#[oai(ty = "bearer")]
+pub struct JwtAuthorization(Bearer);
+
 #[derive(ApiResponse)]
 pub enum HealthResponse {
     #[oai(status = 200)]
@@ -145,9 +142,16 @@ pub struct RegisterResponseBody {
 #[derive(ApiResponse)]
 pub enum LoginResponse {
     #[oai(status = 200)]
-    LoggedIn,
+    LoggedIn(Json<LoginResponseBody>),
     #[oai(status = 404)]
     WrongCredentials,
+    #[oai(status = 500)]
+    CouldNotCreateToken,
+}
+
+#[derive(serde::Deserialize, Object)]
+pub struct LoginResponseBody {
+    pub token: String,
 }
 
 #[derive(ApiResponse)]
@@ -155,9 +159,11 @@ pub enum WeatherResponse {
     #[oai(status = 200)]
     Success(Json<WeatherResponseBody>),
     #[oai(status = 500)]
-    GeolocationQueryFailed(Json<ErrorMessage>),
+    GeolocationQueryFailed,
     #[oai(status = 500)]
-    WeatherQueryFailed(Json<ErrorMessage>),
+    WeatherQueryFailed,
+    #[oai(status = 401)]
+    Unauthorized,
 }
 
 #[derive(serde::Deserialize, Object)]
@@ -166,17 +172,6 @@ pub struct WeatherResponseBody {
     feels_like: f64,
     condition: String,
     last_updated: String,
-}
-
-#[derive(Object)]
-pub struct ErrorMessage {
-    message: String,
-}
-
-impl Display for ErrorMessage {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message)
-    }
 }
 
 #[cfg(not(feature = "integration-test"))]
