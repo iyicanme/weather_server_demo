@@ -6,8 +6,9 @@ use rand_distr::Alphanumeric;
 use reqwest::StatusCode;
 use sqlx::SqlitePool;
 use weather_server_lib::api::{LoginBody, RegisterBody, RegisterResponseBody, WeatherResponseBody};
+use weather_server_lib::authorization::create_token;
 use weather_server_lib::config::Config;
-use weather_server_lib::{create_token, hash_password, queries};
+use weather_server_lib::{password, queries};
 
 #[tokio::test]
 #[serial_test::serial]
@@ -64,7 +65,7 @@ async fn login_with_username_succeeds() {
     let database = spawn_server().await;
 
     let user = User::random();
-    let password_hash = hash_password(&user.password).expect("password hashing failed");
+    let password_hash = password::hash(&user.password);
     queries::register_user(
         &database.connection,
         &user.username,
@@ -98,7 +99,7 @@ async fn login_with_email_succeeds() {
     let database = spawn_server().await;
 
     let user = User::random();
-    let password_hash = hash_password(&user.password).expect("password hashing failed");
+    let password_hash = password::hash(&user.password);
     queries::register_user(
         &database.connection,
         &user.username,
@@ -132,7 +133,7 @@ async fn get_weather_with_logged_in_user_succeeds() {
     let database = spawn_server().await;
 
     let token = create_token(0).expect("token creation failed");
-    let authorization = format!("Bearer {}", token);
+    let authorization = format!("Bearer {token}");
 
     let client = reqwest::Client::default();
     let response = client
@@ -149,7 +150,7 @@ async fn get_weather_with_logged_in_user_succeeds() {
         .await
         .expect("could not obtain weather data");
 
-    database.close().await
+    database.close().await;
 }
 
 #[must_use]

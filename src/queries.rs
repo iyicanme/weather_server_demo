@@ -1,6 +1,12 @@
 use sqlx::error::ErrorKind;
 use sqlx::{Executor, Row, SqlitePool};
 
+/// Persists a user to the database.
+/// 
+/// Caller is responsible to hash the password correctly.
+/// 
+/// # Errors
+/// Will return error if any database error occurs
 pub async fn register_user(
     database: &SqlitePool,
     username: &str,
@@ -24,7 +30,15 @@ pub async fn register_user(
     Ok(user_id)
 }
 
-pub async fn get_password(
+/// Returns user ID and password of user matching the given username or email.
+///
+/// If no user matches, a user ID of 0 and a None in place of a password is returned.
+/// This is so caller can use a placeholder password and continue password validation in the case
+/// user does not exist.
+///
+/// # Errors
+/// Will return error if any database error occurs
+pub async fn get_user_id_and_password_by_username_or_email(
     database: &SqlitePool,
     username: &str,
     email: &str,
@@ -49,6 +63,8 @@ pub async fn get_password(
     (id, Some(password))
 }
 
+/// Error derived from `sqlx::Error`, that allows caller of register query function understand user
+/// already exists.
 #[derive(Debug)]
 pub enum SqlError {
     UniqueConstraintViolation,

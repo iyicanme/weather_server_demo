@@ -1,6 +1,6 @@
 use crate::http_client::HttpClient;
 use crate::queries::SqlError;
-use crate::{check_token, create_token, hash_password, queries, validate_password};
+use crate::{password, queries};
 use poem::web::RemoteAddr;
 use poem_openapi::auth::Bearer;
 use poem_openapi::payload::Json;
@@ -8,18 +8,23 @@ use poem_openapi::{ApiResponse, Object, OpenApi, SecurityScheme};
 use sqlx::SqlitePool;
 use std::net::SocketAddr;
 
+use crate::authorization::{check_token, create_token};
 #[cfg(feature = "integration-test")]
 use {
     rand::Rng,
     std::net::{IpAddr, Ipv4Addr},
 };
 
+/// Holds the state and defines the handlers of the API.
 pub struct Api {
+    /// HTTP client wrapping the foreing geolocation and the weather APIs.
     http_client: HttpClient,
+    /// Database connection.
     database: SqlitePool,
 }
 
 impl Api {
+    /// Creates an instance of the API with given HTTP client and the database connection.
     #[must_use]
     pub const fn new(http_client: HttpClient, database: SqlitePool) -> Self {
         Self {
@@ -31,18 +36,30 @@ impl Api {
 
 #[OpenApi]
 impl Api {
+    /// A handler that always returns success.
+    ///
+    /// Used to check if server is alive.
+    ///
+    /// # Returns
+    /// `200 Success` on every call
     #[oai(path = "/health_check", method = "get")]
     pub async fn health_check(&self) -> HealthResponse {
         HealthResponse::Alive
     }
 
+    /// Registers a user.
+    ///
+    /// Password is hashed with Argon2 before getting persisted.
+    ///
+    /// # Returns
+    /// `201 Created` with the created user's ID on success.
+    ///
+    /// `409 Conflict` if user already exists.
+    ///
+    /// `500 Internal Server Error` if the database operation fails.
     #[oai(path = "/register", method = "post")]
     pub async fn register(&self, body: Json<RegisterBody>) -> RegisterResponse {
-        let password_hash = match hash_password(&body.password) {
-            Ok(h) => h,
-            Err(_) => return RegisterResponse::RegistrationFailed,
-        };
-
+        let password_hash = password::hash(&body.password);
         let user_id = match queries::register_user(
             &self.database,
             &body.username,
@@ -59,12 +76,24 @@ impl Api {
         RegisterResponse::Registered(Json(RegisterResponseBody { user_id }))
     }
 
+    /// Logs in the user with given credentials.
+    /// User identifier can either be username or email.
+    ///
+    /// If the user does not exist with given identifier, the password is still hashed and
+    /// compared against a placeholder hash as a measure against timing attacks.
+    ///
+    /// # Returns
+    /// `200 Success` and a JWT token if passwords match.
+    ///
+    /// `404 Not Found` if such user does not exist or password do not match.
+    ///
+    /// `500 Internal Server Error` if JWT token creation fails.
     #[oai(path = "/login", method = "post")]
     pub async fn login(&self, body: Json<LoginBody>) -> LoginResponse {
         let (user_id, password_hash) =
-            queries::get_password(&self.database, &body.identifier, &body.identifier).await;
+            queries::get_user_id_and_password_by_username_or_email(&self.database, &body.identifier, &body.identifier).await;
 
-        let password_match = validate_password(body.password.clone(), password_hash).await;
+        let password_match = password::validate(body.password.clone(), password_hash).await;
         let Ok(token) = create_token(user_id) else {
             return LoginResponse::CouldNotCreateToken;
         };
@@ -76,6 +105,21 @@ impl Api {
         }
     }
 
+    /// Returns weather information for the caller.
+    /// Location of the user is determined with their IP address.
+    ///
+    /// An HTTP call to a geolocation API with the caller's IP is made to get their coordinates.
+    /// Then the weather information for that coordinate is obtained
+    /// with an HTTP call to a weather API.
+    ///
+    /// Requires a valid JWT token.
+    ///
+    /// # Returns
+    /// `200 Success` with the weather information on success.
+    ///
+    /// `401 Unauthorized` if no JWT token is attached or attached token is invalid.
+    ///
+    /// `500 Internal Server Error` if the call to foreign APIs fail.
     #[oai(path = "/weather", method = "get")]
     pub async fn weather(
         &self,
@@ -114,71 +158,99 @@ impl Api {
     }
 }
 
+/// Information used in `register` request body.
 #[derive(serde::Serialize, Object)]
 pub struct RegisterBody {
+    /// User's username. Has to be unique.
     pub username: String,
+    /// User's email. Has to be unique.
     pub email: String,
+    /// User's password.
     pub password: String,
 }
 
+/// Information used in `login` request body.
 #[derive(serde::Serialize, Object)]
 pub struct LoginBody {
+    /// Can either be user's `username` or `email`.
     pub identifier: String,
+    /// User's password
     pub password: String,
 }
 
+/// Describes authorization used in `weather` request.
 #[derive(SecurityScheme)]
 #[oai(ty = "bearer")]
 pub struct JwtAuthorization(Bearer);
 
+/// Response of `health_check` call.
 #[derive(ApiResponse)]
 pub enum HealthResponse {
+    /// Returned on all calls
     #[oai(status = 200)]
     Alive,
 }
 
+/// Response of `register` call.
 #[derive(ApiResponse)]
 pub enum RegisterResponse {
+    /// Returned when registration succeeds.
     #[oai(status = 201)]
     Registered(Json<RegisterResponseBody>),
+    /// Returned when user with same credentials exists.
     #[oai(status = 409)]
     AlreadyRegistered,
+    /// Returned when persisting the user fails.
     #[oai(status = 500)]
     RegistrationFailed,
 }
 
+/// Body of `register` call success response.
 #[derive(serde::Deserialize, Object)]
 pub struct RegisterResponseBody {
+    /// ID of registered user.
     pub user_id: u64,
 }
 
+/// Response of `login` call.
 #[derive(ApiResponse)]
 pub enum LoginResponse {
+    /// Returned when user successfully logs in.
     #[oai(status = 200)]
     LoggedIn(Json<LoginResponseBody>),
+    /// Returned when such user does not exist or password does not match.
     #[oai(status = 404)]
     WrongCredentials,
+    /// Returned when JWT token creation fails.
     #[oai(status = 500)]
     CouldNotCreateToken,
 }
 
+/// Body of `login` call success response.
 #[derive(serde::Deserialize, Object)]
 pub struct LoginResponseBody {
+    /// Created JWT token.
     pub token: String,
 }
 
+/// Response of `weather` call.
 #[derive(ApiResponse)]
 pub enum WeatherResponse {
+    /// Returned when weather information is successfully obtained.
     #[oai(status = 200)]
     Success(Json<WeatherResponseBody>),
-    #[oai(status = 500)]
-    GeolocationQueryFailed,
-    #[oai(status = 500)]
-    WeatherQueryFailed,
+    /// Returned when no token is provided or provided token is invalid.
     #[oai(status = 401)]
     Unauthorized,
+    /// Returned when call to geolocation API fails.
+    #[oai(status = 500)]
+    GeolocationQueryFailed,
+    /// Returned when call to weather API fails.
+    #[oai(status = 500)]
+    WeatherQueryFailed,
 }
 
+/// Body of `weather` call success response.
 #[derive(serde::Deserialize, Object)]
 pub struct WeatherResponseBody {
     temperature: f64,
@@ -187,18 +259,22 @@ pub struct WeatherResponseBody {
     last_updated: String,
 }
 
+/// Returns IP string for given `SocketAddr`.
+///
+/// Only exist so it can be overridden in tests with a version that returns a random IP string
+/// from a range that does not belong to local network.
 #[cfg(not(feature = "integration-test"))]
 fn get_ip_string(address: &SocketAddr) -> String {
     address.ip().to_string()
 }
 
-// In tests, clients are always local, so IP address is always loopback
-// The API we are using does not like that, so we make up an IP
+/// In tests, clients are always local, so IP address is always loopback
+/// The API we are using does not like that, so we make up an IP
 #[cfg(feature = "integration-test")]
 fn get_ip_string(address: &SocketAddr) -> String {
     let mut ip = address.ip();
 
-    if crate::is_loopback_address(&ip) {
+    if crate::helpers::is_loopback_address(&ip) {
         const IP_BLOCK_SIZE: u32 = 2_097_152;
         let range_start = [78u8, 160u8, 0u8, 0u8];
         let offset: [u8; 4] = rand::thread_rng().gen_range(0..IP_BLOCK_SIZE).to_be_bytes();

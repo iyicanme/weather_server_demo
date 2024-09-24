@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use reqwest::StatusCode;
 
+/// Wrapper for foreign API accesses.
 pub struct HttpClient {
     client: reqwest::Client,
     weather_api_key: String,
@@ -12,15 +13,26 @@ pub struct HttpClient {
 }
 
 impl HttpClient {
+    /// Default geolocation API hostname.
     const GEOLOCATION_API_HOST: &'static str = "https://ipapi.co";
+
+    /// Default weather API hostname.
     const WEATHER_API_HOST: &'static str = "https://api.weatherapi.com";
 
-    #[must_use]
+    /// Creates a `HTTPClient` instance with default hostnames.
+    /// 
+    /// # Errors
+    /// Returns an error if environment variable `WEATHER_API_KEY` is not set.
     pub fn new() -> Result<Self, VarError> {
         Self::new_with_hosts(Self::GEOLOCATION_API_HOST, Self::WEATHER_API_HOST)
     }
 
-    #[must_use]
+    /// Creates a `HTTPClient` instance with given foreign API hostnames.
+    /// 
+    /// Used in testing to enable the ability to direct the calls to a local endpoint.
+    /// 
+    /// # Errors
+    /// Returns an error if environment variable `WEATHER_API_KEY` is not set.
     pub fn new_with_hosts(
         geolocation_api_host: &str,
         weather_api_host: &str,
@@ -36,6 +48,16 @@ impl HttpClient {
         Ok(client)
     }
 
+    /// Makes a call to the geolocation API, parses the response and returns the coordinates.
+    /// 
+    /// Expected response format is `LATITUDE,LONGITUDE`.
+    /// 
+    /// # Errors
+    /// Returns an error if:
+    /// - Call to endpoint fails
+    /// - Response status code is not `200 Success`
+    /// - The response does not include a body
+    /// - Response has unexpected format
     pub async fn get_coordinates_for_ip(&self, ip: &str) -> Result<GeolocationApiResponse, Error> {
         let url = format!("{}/{ip}/latlong/", self.geolocation_api_host);
 
@@ -64,6 +86,12 @@ impl HttpClient {
         Ok(response)
     }
 
+    /// Makes a call to weather API and returns the response.
+    /// 
+    /// # Errors
+    /// Will fail if:
+    /// - Call to endpoint fails
+    /// - The body is not in expected format
     pub async fn get_weather_for_coordinates(
         &self,
         latitude: f64,
@@ -88,12 +116,19 @@ impl HttpClient {
     }
 }
 
+/// The response HTTP client returns from geolocation API call.
 #[derive(serde::Deserialize)]
 pub struct GeolocationApiResponse {
     pub latitude: f64,
     pub longitude: f64,
 }
 
+/// The response HTTP client returns from weather API call.
+/// 
+/// The API is configured to return only the desired information
+/// but can be configured to return more.
+/// 
+/// The API also returns information about the location of the coordinates, but they are discarded.
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct WeatherApiResponse {
     #[serde(skip)]
@@ -101,10 +136,12 @@ pub struct WeatherApiResponse {
     pub current: Current,
 }
 
-// We need a dummy location struct so we can tell serde to skip de/serialize it
+/// A placeholder type, used in `WeatherApiResponse`
+/// so `location` section of the response can be discarded.
 #[derive(Default)]
 pub struct Location;
 
+/// The information the API returns about the weather at given location
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct Current {
     pub last_updated: String,
@@ -113,11 +150,13 @@ pub struct Current {
     pub feelslike_c: f64,
 }
 
+/// The information about weather condition
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct Condition {
     pub text: String,
 }
 
+/// HTTP client errors
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("API request failed")]
@@ -130,6 +169,7 @@ pub enum Error {
     ApiInternalError(String),
 }
 
+/// Represents a coordinate, used to parse the geolocation API response
 pub struct Coordinate {
     pub latitude: f64,
     pub longitude: f64,

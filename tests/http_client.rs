@@ -9,7 +9,7 @@ use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 use weather_server_lib::http_client::{
     Condition, Coordinate, Current, HttpClient, Location, WeatherApiResponse,
 };
-use weather_server_lib::is_loopback_address;
+use weather_server_lib::helpers::is_loopback_address;
 
 #[tokio::test]
 async fn geolocation_api_succeeds_for_non_loopback_ip() {
