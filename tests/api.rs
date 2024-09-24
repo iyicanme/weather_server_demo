@@ -1,13 +1,13 @@
 use std::time::Duration;
 
 use fake::Fake;
-use rand::distr::Alphanumeric;
 use rand::{thread_rng, Rng};
+use rand_distr::Alphanumeric;
 use reqwest::StatusCode;
 use sqlx::SqlitePool;
 use weather_server_lib::api::{LoginBody, RegisterBody, RegisterResponseBody, WeatherResponseBody};
 use weather_server_lib::config::Config;
-use weather_server_lib::{create_token, queries};
+use weather_server_lib::{create_token, hash_password, queries};
 
 #[tokio::test]
 #[serial_test::serial]
@@ -64,11 +64,12 @@ async fn login_with_username_succeeds() {
     let database = spawn_server().await;
 
     let user = User::random();
+    let password_hash = hash_password(&user.password).expect("password hashing failed");
     queries::register_user(
         &database.connection,
         &user.username,
         &user.email,
-        &user.password,
+        &password_hash,
     )
     .await
     .expect("user persisting failed");
@@ -97,11 +98,12 @@ async fn login_with_email_succeeds() {
     let database = spawn_server().await;
 
     let user = User::random();
+    let password_hash = hash_password(&user.password).expect("password hashing failed");
     queries::register_user(
         &database.connection,
         &user.username,
         &user.email,
-        &user.password,
+        &password_hash,
     )
     .await
     .expect("user persisting failed");

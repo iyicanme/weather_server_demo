@@ -16,7 +16,13 @@ pub mod config;
 pub mod http_client;
 pub mod queries;
 
+use argon2::password_hash::SaltString;
+use argon2::{
+    password_hash, Algorithm, Argon2, Params as Argon2Params, PasswordHash, PasswordHasher,
+    PasswordVerifier, Version,
+};
 use std::sync::OnceLock;
+use tokio::task::spawn_blocking;
 
 static JWT_KEYS: OnceLock<Keys> = OnceLock::new();
 
@@ -85,9 +91,14 @@ pub fn is_loopback_address(ip: &IpAddr) -> bool {
 
 pub fn create_token(user_id: u64) -> Result<String, jsonwebtoken::errors::Error> {
     // We should reduce expiration interval so changes in user can be applied sooner
-    let expiration = (Utc::now().naive_utc() + chrono::naive::Days::new(1)).and_utc().timestamp() as u64;
+    let expiration = (Utc::now().naive_utc() + chrono::naive::Days::new(1))
+        .and_utc()
+        .timestamp() as u64;
 
-    let body = TokenBody { user_id, expiration };
+    let body = TokenBody {
+        user_id,
+        expiration,
+    };
     let header = Header::default();
 
     jsonwebtoken::encode(&header, &body, &Keys::get().encoding)
@@ -130,4 +141,34 @@ impl Keys {
             .expect("no JWT secret in environment variables, please define 'JWT_SECRET'")
             .into_bytes()
     }
+}
+
+pub fn hash_password(password: &str) -> Result<String, password_hash::Error> {
+    let salt = SaltString::generate(&mut rand::thread_rng());
+    let params = Argon2Params::new(15000, 2, 1, None)?;
+    Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
+        .hash_password(password.as_bytes(), &salt)
+        .map(|h| h.to_string())
+}
+
+pub async fn validate_password(password: String, hash: Option<String>) -> bool {
+    let placeholder_hash = "$argon2id$v=19$m=15000,t=2,p=1$\
+        gZiV/M1gPc22ElAH/Jh1Hw$\
+        CWOrkoo7oJBQ/iyh7uJ0LO2aLEfrHwTWllSAxT0zRno"
+        .to_string();
+    let hash = hash.unwrap_or(placeholder_hash);
+
+    compute_password(password, hash).await.is_ok()
+}
+
+// This is a separate password so all functions that can fail is encapsulated 
+// and we can just call is_ok() to convert all results to bool
+async fn compute_password(password: String, hash: String) -> Result<(), anyhow::Error> {
+    spawn_blocking(move || {
+        let hash = PasswordHash::new(&hash)?;
+        Argon2::default().verify_password(password.as_bytes(), &hash)
+    })
+    .await??;
+
+    Ok(())
 }

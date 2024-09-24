@@ -17,10 +17,7 @@ impl HttpClient {
 
     #[must_use]
     pub fn new() -> Result<Self, VarError> {
-        Self::new_with_hosts(
-            Self::GEOLOCATION_API_HOST,
-            Self::WEATHER_API_HOST,
-        )
+        Self::new_with_hosts(Self::GEOLOCATION_API_HOST, Self::WEATHER_API_HOST)
     }
 
     #[must_use]

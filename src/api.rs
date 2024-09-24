@@ -1,6 +1,6 @@
 use crate::http_client::HttpClient;
 use crate::queries::SqlError;
-use crate::{check_token, create_token, queries};
+use crate::{check_token, create_token, hash_password, queries, validate_password};
 use poem::web::RemoteAddr;
 use poem_openapi::auth::Bearer;
 use poem_openapi::payload::Json;
@@ -9,7 +9,10 @@ use sqlx::SqlitePool;
 use std::net::SocketAddr;
 
 #[cfg(feature = "integration-test")]
-use {rand::{thread_rng, Rng}, std::net::{IpAddr, Ipv4Addr}};
+use {
+    rand::Rng,
+    std::net::{IpAddr, Ipv4Addr},
+};
 
 pub struct Api {
     http_client: HttpClient,
@@ -35,13 +38,18 @@ impl Api {
 
     #[oai(path = "/register", method = "post")]
     pub async fn register(&self, body: Json<RegisterBody>) -> RegisterResponse {
+        let password_hash = match hash_password(&body.password) {
+            Ok(h) => h,
+            Err(_) => return RegisterResponse::RegistrationFailed,
+        };
+
         let user_id = match queries::register_user(
             &self.database,
             &body.username,
             &body.email,
-            &body.password,
+            &password_hash,
         )
-            .await
+        .await
         {
             Ok(i) => i,
             Err(SqlError::UniqueConstraintViolation) => return RegisterResponse::AlreadyRegistered,
@@ -53,14 +61,12 @@ impl Api {
 
     #[oai(path = "/login", method = "post")]
     pub async fn login(&self, body: Json<LoginBody>) -> LoginResponse {
-        let (user_id, password) = queries::get_password(&self.database, &body.identifier, &body.identifier)
-            .await
-            .unwrap_or_else(|_| (0u64, String::new()));
+        let (user_id, password_hash) =
+            queries::get_password(&self.database, &body.identifier, &body.identifier).await;
 
-        let password_match = password == body.password;
-
+        let password_match = validate_password(body.password.clone(), password_hash).await;
         let Ok(token) = create_token(user_id) else {
-            return LoginResponse::CouldNotCreateToken
+            return LoginResponse::CouldNotCreateToken;
         };
 
         if password_match {
@@ -71,7 +77,11 @@ impl Api {
     }
 
     #[oai(path = "/weather", method = "get")]
-    pub async fn weather(&self, authorization: JwtAuthorization, ip: &RemoteAddr) -> WeatherResponse {
+    pub async fn weather(
+        &self,
+        authorization: JwtAuthorization,
+        ip: &RemoteAddr,
+    ) -> WeatherResponse {
         if !check_token(&authorization.0.token) {
             return WeatherResponse::Unauthorized;
         }
@@ -79,15 +89,18 @@ impl Api {
         let ip_string = match ip.as_socket_addr() {
             Some(addr) => get_ip_string(addr),
             None => return WeatherResponse::GeolocationQueryFailed,
-
         };
 
         let Ok(response) = self.http_client.get_coordinates_for_ip(&ip_string).await else {
-            return WeatherResponse::GeolocationQueryFailed
+            return WeatherResponse::GeolocationQueryFailed;
         };
 
-        let Ok(response) = self.http_client.get_weather_for_coordinates(response.latitude, response.longitude).await else {
-            return WeatherResponse::WeatherQueryFailed
+        let Ok(response) = self
+            .http_client
+            .get_weather_for_coordinates(response.latitude, response.longitude)
+            .await
+        else {
+            return WeatherResponse::WeatherQueryFailed;
         };
 
         let response_body = WeatherResponseBody {
@@ -188,7 +201,7 @@ fn get_ip_string(address: &SocketAddr) -> String {
     if crate::is_loopback_address(&ip) {
         const IP_BLOCK_SIZE: u32 = 2_097_152;
         let range_start = [78u8, 160u8, 0u8, 0u8];
-        let offset: [u8; 4] = thread_rng().gen_range(0..IP_BLOCK_SIZE).to_be_bytes();
+        let offset: [u8; 4] = rand::thread_rng().gen_range(0..IP_BLOCK_SIZE).to_be_bytes();
 
         ip = IpAddr::V4(Ipv4Addr::new(
             range_start[0] + offset[0],

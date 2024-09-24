@@ -1,9 +1,8 @@
+use rand::seq::SliceRandom;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::str::FromStr;
-
-use rand::seq::IndexedRandom;
 use wiremock::matchers::{method, path, path_regex};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 

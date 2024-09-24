@@ -28,7 +28,7 @@ pub async fn get_password(
     database: &SqlitePool,
     username: &str,
     email: &str,
-) -> Result<(u64, String), SqlError> {
+) -> (u64, Option<String>) {
     let query = sqlx::query!(
         r#"
             SELECT id, password
@@ -39,12 +39,14 @@ pub async fn get_password(
         email
     );
 
-    let row = database.fetch_one(query).await.map_err(SqlError::from)?;
+    let Ok(row) = database.fetch_one(query).await.map_err(SqlError::from) else {
+        return (0u64, None);
+    };
 
     let id = row.get::<u64, &str>("id");
     let password = row.get::<String, &str>("password");
 
-    Ok((id, password))
+    (id, Some(password))
 }
 
 #[derive(Debug)]

@@ -17,12 +17,14 @@ integration-test = []
 
 [dependencies]
 anyhow = "1.0"
+argon2 = { version = "0.6.0-pre.1", features = ["std", "rand"] }
 chrono = { version = "0.4", features = ["clock", "serde"] }
 fake = "2.9"
 jsonwebtoken = "9.3"
 poem = { version = "3.1", features = ["session"] }
 poem-openapi = { version = "5.1", features = ["swagger-ui"] }
-rand = { version = "0.9.0-alpha.2", default-features = false, features = ["std", "std_rng", "getrandom"] }
+rand = { version = "0.8", default-features = false, features = ["std", "std_rng", "getrandom"] }
+rand_distr = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots"] }
 serde = "1.0"
 serde_json = "1.0"
