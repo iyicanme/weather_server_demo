@@ -38,3 +38,4 @@ tracing-subscriber = "0.3"
 
 [dev-dependencies]
 wiremock = "0.6"
+weather_server_demo = { path = ".", features = ["integration-test"] }

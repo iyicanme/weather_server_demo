@@ -2876,6 +2876,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "weather_server_demo",
  "wiremock",
 ]
 
