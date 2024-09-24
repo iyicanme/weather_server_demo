@@ -5,9 +5,9 @@ use rand::distr::Alphanumeric;
 use rand::{thread_rng, Rng};
 use reqwest::StatusCode;
 use sqlx::SqlitePool;
-use weather_server_lib::api::{LoginBody, LoginResponseBody, RegisterBody, RegisterResponseBody, WeatherResponseBody};
+use weather_server_lib::api::{LoginBody, RegisterBody, RegisterResponseBody, WeatherResponseBody};
 use weather_server_lib::config::Config;
-use weather_server_lib::queries;
+use weather_server_lib::{create_token, queries};
 
 #[tokio::test]
 #[serial_test::serial]
@@ -129,37 +129,10 @@ async fn login_with_email_succeeds() {
 async fn get_weather_with_logged_in_user_succeeds() {
     let database = spawn_server().await;
 
-    let user = User::random();
-    queries::register_user(
-        &database.connection,
-        &user.username,
-        &user.email,
-        &user.password,
-    )
-    .await
-    .expect("user persisting failed");
-
-    let request_body = LoginBody {
-        identifier: user.email,
-        password: user.password,
-    };
+    let token = create_token(0).expect("token creation failed");
+    let authorization = format!("Bearer {}", token);
 
     let client = reqwest::Client::default();
-    let response = client
-        .post("http://127.0.0.1:8000/api/login")
-        .json(&request_body)
-        .send()
-        .await
-        .expect("registration request failed");
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let response = response
-        .json::<LoginResponseBody>()
-        .await
-        .expect("reading token failed");
-
-    let authorization = format!("Bearer {}", response.token);
     let response = client
         .get("http://127.0.0.1:8000/api/weather")
         .header("Authorization", authorization)
@@ -167,20 +140,14 @@ async fn get_weather_with_logged_in_user_succeeds() {
         .await
         .expect("weather request failed");
 
-    if !response.status().is_success() {
-        let response = response
-            .text()
-            .await
-            .expect("could not obtain error message");
-        panic!("{response}");
-    }
+    assert_eq!(response.status(), StatusCode::OK);
 
     let _ = response
         .json::<WeatherResponseBody>()
         .await
         .expect("could not obtain weather data");
 
-    database.close().await;
+    database.close().await
 }
 
 #[must_use]
