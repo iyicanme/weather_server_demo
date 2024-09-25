@@ -51,7 +51,8 @@ use crate::api::Api;
 use crate::config::Config;
 use crate::http_client::HttpClient;
 use poem::listener::TcpListener;
-use poem::{Route, Server};
+use poem::middleware::Cors;
+use poem::{EndpointExt, Route, Server};
 use poem_openapi::OpenApiService;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::{Sqlite, SqlitePool};
@@ -79,7 +80,7 @@ pub mod queries;
 /// Steps taken are:
 /// - Connect to database
 /// - Create the HTTP client that is used to call foreign APIs
-/// - Create the route scheme, `/api` for implemented handlers and `/` for Swagger UI
+/// - Create the route scheme, `/api` for implemented handlers and `/swagger` for Swagger UI
 /// - Creates the listener
 ///
 /// # Errors
@@ -90,11 +91,14 @@ pub async fn setup(config: &Config) -> Result<PendingServer, anyhow::Error> {
     let http_client = HttpClient::new()?;
     let api = Api::new(http_client, database.clone());
 
-    let api_service =
-        OpenApiService::new(api, "Weather Server Demo", "1.0").server("http://localhost:3000/api");
+    let api_service = OpenApiService::new(api, "Weather Server Demo", "1.0")
+        .server("http://localhost:3000/api");
     let ui = api_service.swagger_ui();
-
-    let routes = Route::new().nest("/api", api_service).nest("/", ui);
+    let api_service = api_service.with(Cors::new());
+    
+    let routes = Route::new()
+        .nest("/api", api_service)
+        .nest("/swagger", ui);
 
     let address = format!("0.0.0.0:{}", config.port);
     let listener = TcpListener::bind(address);
