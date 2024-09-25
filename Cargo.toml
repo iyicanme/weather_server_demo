@@ -19,23 +19,21 @@ integration-test = []
 anyhow = "1.0"
 argon2 = { version = "0.6.0-pre.1", features = ["std", "rand"] }
 chrono = { version = "0.4", features = ["clock", "serde"] }
-fake = "2.9"
 jsonwebtoken = "9.3"
 poem = { version = "3.1", features = ["session"] }
 poem-openapi = { version = "5.1", features = ["swagger-ui"] }
 rand = { version = "0.8", default-features = false, features = ["std", "std_rng", "getrandom"] }
-rand_distr = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots"] }
 serde = "1.0"
-serde_json = "1.0"
-serial_test = "3.1"
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio-rustls"] }
 thiserror = "1.0"
 tokio = { version = "1.40", features = ["macros", "rt-multi-thread"] }
 toml = "0.8"
 tracing = "0.1"
-tracing-subscriber = "0.3"
 
 [dev-dependencies]
+fake = "2.9"
+rand_distr = "0.4"
+serial_test = "3.1"
 wiremock = "0.6"
 weather_server_demo = { path = ".", features = ["integration-test"] }
