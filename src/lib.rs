@@ -1,3 +1,52 @@
+/*!
+Serves a weather information API that locates user from their IP address.
+
+Makes use of `ipapi.co` for geolocation and `weatherapi.com` for weather information.
+
+# Prerequisites
+This program requires some configuration over two sources and some setup:
+
+## Configuration file
+A configuration file named: `config.toml` is required to be available on program start
+in the current working directory.
+
+Configuration file includes two entries:
+
+`port` determines which port the server will serve on. 
+
+`database_name` determines what name the user database file should be.
+Database name should not include paths or extensions.
+
+## Environment variables
+Program requires two environment variables to be set before start.
+
+`JWT_SECRET` is used as the secret when issuing JWT tokens.
+
+`WEATHER_API_KEY` is the API key for `weatherapi.com`.
+An API key can be acquired by signing up at `https://www.weatherapi.com/signup.aspx` and 
+heading to `https://www.weatherapi.com/my/`.
+
+These configurations are expected through environment variables so they can be set
+when hosted cloud container services through their interfaces.
+
+## Weather API response fields setup
+`weatherapi.com` API is configured to send only the required information on API call.
+
+The API can be configured at `https://www.weatherapi.com/my/fields.aspx`.
+Under `Current Weather` section, only the fields: `last_updated`, `temp_c`, `text` and 
+`feels_like_c` should be selected.
+
+# Running the program
+The program is expected to run inside a container described by the provided Dockerfile.
+Server itself works with HTTP and HTTPS is mandated through the Docker configuration.
+
+It can be run with:
+
+```bash
+docker up -p 443:8000 -e JWT_SECRET=* -e WEATHER_API_KEY=*
+```
+*/
+
 use crate::api::Api;
 use crate::config::Config;
 use crate::http_client::HttpClient;
