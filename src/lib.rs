@@ -35,16 +35,6 @@ when hosted cloud container services through their interfaces.
 The API can be configured at `https://www.weatherapi.com/my/fields.aspx`.
 Under `Current Weather` section, only the fields: `last_updated`, `temp_c`, `text` and 
 `feels_like_c` should be selected.
-
-# Running the program
-The program is expected to run inside a container described by the provided Dockerfile.
-Server itself works with HTTP and HTTPS is mandated through the Docker configuration.
-
-It can be run with:
-
-```bash
-docker up -p 443:8000 -e JWT_SECRET=* -e WEATHER_API_KEY=*
-```
 */
 
 use crate::api::Api;
