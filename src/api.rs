@@ -1,3 +1,4 @@
+use crate::authorization::{check_token, create_token};
 use crate::http_client::HttpClient;
 use crate::queries::SqlError;
 use crate::{password, queries};
@@ -7,8 +8,6 @@ use poem_openapi::payload::Json;
 use poem_openapi::{ApiResponse, Object, OpenApi, SecurityScheme};
 use sqlx::SqlitePool;
 use std::net::SocketAddr;
-
-use crate::authorization::{check_token, create_token};
 #[cfg(feature = "integration-test")]
 use {
     rand::Rng,
@@ -69,8 +68,14 @@ impl Api {
         .await
         {
             Ok(i) => i,
-            Err(SqlError::UniqueConstraintViolation) => return RegisterResponse::AlreadyRegistered,
-            Err(SqlError::Other) => return RegisterResponse::RegistrationFailed,
+            Err(SqlError::UniqueConstraintViolation) => return RegisterResponse::AlreadyRegistered(
+                ResponseMessage::new("A user with given credentials already exists.")
+                    .into_json()
+            ),
+            Err(SqlError::Other) => return RegisterResponse::RegistrationFailed(
+                ResponseMessage::new("Registration failed . Try again.")
+                    .into_json()
+            ),
         };
 
         RegisterResponse::Registered(Json(RegisterResponseBody { user_id }))
@@ -95,13 +100,17 @@ impl Api {
 
         let password_match = password::validate(body.password.clone(), password_hash).await;
         let Ok(token) = create_token(user_id) else {
-            return LoginResponse::CouldNotCreateToken;
+            return LoginResponse::CouldNotCreateToken(
+                ResponseMessage::new("Login failed.").into_json()
+            );
         };
 
         if password_match {
             LoginResponse::LoggedIn(Json(LoginResponseBody { token }))
         } else {
-            LoginResponse::WrongCredentials
+            LoginResponse::WrongCredentials(
+                ResponseMessage::new("Username/email or password is wrong.").into_json()
+            )
         }
     }
 
@@ -127,16 +136,22 @@ impl Api {
         ip: &RemoteAddr,
     ) -> WeatherResponse {
         if !check_token(&authorization.0.token) {
-            return WeatherResponse::Unauthorized;
+            return WeatherResponse::Unauthorized(
+                ResponseMessage::new("Unauhorized access.").into_json()
+            );
         }
 
         let ip_string = match ip.as_socket_addr() {
             Some(addr) => get_ip_string(addr),
-            None => return WeatherResponse::GeolocationQueryFailed,
+            None => return WeatherResponse::GeolocationQueryFailed(
+                ResponseMessage::new("Could not fetch user IP.").into_json()
+            ),
         };
 
         let Ok(response) = self.http_client.get_coordinates_for_ip(&ip_string).await else {
-            return WeatherResponse::GeolocationQueryFailed;
+            return WeatherResponse::GeolocationQueryFailed(
+                ResponseMessage::new("Could not fetch user location.").into_json()
+            );
         };
 
         let Ok(response) = self
@@ -144,7 +159,9 @@ impl Api {
             .get_weather_for_coordinates(response.latitude, response.longitude)
             .await
         else {
-            return WeatherResponse::WeatherQueryFailed;
+            return WeatherResponse::WeatherQueryFailed(
+                ResponseMessage::new("Could not fetch weather information.").into_json()
+            );
         };
 
         let response_body = WeatherResponseBody {
@@ -199,10 +216,10 @@ pub enum RegisterResponse {
     Registered(Json<RegisterResponseBody>),
     /// Returned when user with same credentials exists.
     #[oai(status = 409)]
-    AlreadyRegistered,
+    AlreadyRegistered(ResponseBody),
     /// Returned when persisting the user fails.
     #[oai(status = 500)]
-    RegistrationFailed,
+    RegistrationFailed(ResponseBody),
 }
 
 /// Body of `register` call success response.
@@ -220,10 +237,10 @@ pub enum LoginResponse {
     LoggedIn(Json<LoginResponseBody>),
     /// Returned when such user does not exist or password does not match.
     #[oai(status = 404)]
-    WrongCredentials,
+    WrongCredentials(ResponseBody),
     /// Returned when JWT token creation fails.
     #[oai(status = 500)]
-    CouldNotCreateToken,
+    CouldNotCreateToken(ResponseBody),
 }
 
 /// Body of `login` call success response.
@@ -241,13 +258,13 @@ pub enum WeatherResponse {
     Success(Json<WeatherResponseBody>),
     /// Returned when no token is provided or provided token is invalid.
     #[oai(status = 401)]
-    Unauthorized,
+    Unauthorized(ResponseBody),
     /// Returned when call to geolocation API fails.
     #[oai(status = 500)]
-    GeolocationQueryFailed,
+    GeolocationQueryFailed(ResponseBody),
     /// Returned when call to weather API fails.
     #[oai(status = 500)]
-    WeatherQueryFailed,
+    WeatherQueryFailed(ResponseBody),
 }
 
 /// Body of `weather` call success response.
@@ -257,6 +274,29 @@ pub struct WeatherResponseBody {
     feels_like: f64,
     condition: String,
     last_updated: String,
+}
+
+/// A response body serializable to JSON by poem-openapi
+pub type ResponseBody = Json<ResponseMessage>;
+
+/// A response body that used to return generic messages to the caller, usually errors
+#[derive(Object)]
+pub struct ResponseMessage {
+    message: String,
+}
+
+impl ResponseMessage {
+    /// Creates error message from given string
+    fn new(message: &str) -> Self {
+        Self {
+            message: message.to_owned()
+        }
+    }
+
+    /// Converts message into a poem-openapi JSON serializable type
+    const fn into_json(self) -> ResponseBody {
+        Json(self)
+    }
 }
 
 /// Returns IP string for given `SocketAddr`.
