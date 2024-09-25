@@ -37,6 +37,36 @@ The API can be configured at `https://www.weatherapi.com/my/fields.aspx`.
 Under `Current Weather` section, only the fields: `last_updated`, `temp_c`, `text` and
 `feels_like_c` should be selected.
 
+## Endpoints
+
+### `/api/register`
+
+Creates a user with given credentials.
+Credentials are `username`, `email` and `password`.
+
+`username` is required to be between 6 and 24 (inclusive) characters and contain only letters, numbers, dots and underscores.
+
+`email` is required to be a valid email address.
+
+`password` is required to be between 8 and 32 (inclusive) characters and contain only letters, numbers and symbols
+`~ ! @ $ % ^ & * ( ) _ - + = { } [ ] | : ' , . ? /`
+
+### `/api/login`
+
+Creates a session token for valid user information to be used in weather information queries.
+Expects `identifier` and `password` fields
+
+`identifier` is either user's username or email address.
+
+`password` is password of the corresponding user.
+
+### `/api/weather`
+
+Returns the weather information for the location of caller's IP address.
+
+Does not take any parameters but requires header `Authorization` to be set to `Bearer <token>` where the `<token>` is 
+the session token returned by `/api/login`.
+
 ## Running the project
 
 Unless hosted in cloud services, program should be run in `dev` profile. 
