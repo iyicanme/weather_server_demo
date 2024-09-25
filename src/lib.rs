@@ -63,8 +63,6 @@ pub mod api;
 pub mod authorization;
 /// Configuration parameters and reader
 pub mod config;
-/// Helper functions
-pub mod helpers;
 /// HTTP client wrapping the geolocation and weather APIs
 pub mod http_client;
 /// Hashing and checking of hashed passwords

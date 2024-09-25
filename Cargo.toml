@@ -11,9 +11,6 @@ name = "weather_server_lib"
 path = "src/main.rs"
 name = "weather_server_demo"
 
-[features]
-default = []
-integration-test = []
 
 [dependencies]
 anyhow = "1.0"
@@ -38,4 +35,3 @@ fake = "2.9"
 rand_distr = "0.4"
 serial_test = "3.1"
 wiremock = "0.6"
-weather_server_demo = { path = ".", features = ["integration-test"] }

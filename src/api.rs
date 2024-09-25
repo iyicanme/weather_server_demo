@@ -9,7 +9,9 @@ use poem_openapi::{ApiResponse, Object, OpenApi, SecurityScheme};
 use sqlx::SqlitePool;
 use std::net::SocketAddr;
 use std::str::FromStr;
-#[cfg(feature = "integration-test")]
+
+/// We hijack the debug_assertions compilation condition to enable replacing local IPs
+#[cfg(debug_assertions)]
 use {
     rand::Rng,
     std::net::{IpAddr, Ipv4Addr},
@@ -50,7 +52,13 @@ impl Api {
     /// Registers a user.
     ///
     /// Password is hashed with Argon2 before getting persisted.
-    ///
+    /// 
+    /// Client credentials have following restrictions:
+    /// - Username can be 6..=24 characters long and can only contain
+    /// letters, numbers, dot and underscore.
+    /// - Password can be 8..=32 characters long and can only contain letters, numbers and symbols
+    /// ~!@$%^&*()_-+={\[\}\]|:',.?/
+    /// 
     /// # Returns
     /// `201 Created` with the created user's ID on success.
     ///
@@ -65,7 +73,7 @@ impl Api {
                 ResponseMessage::new(&format!("Invalid credentials: {e}")).into_json()
             ),
         };
-        
+
         let password_hash = password::hash(&credentials.password);
         let user_id = match queries::register_user(
             &self.database,
@@ -184,20 +192,23 @@ impl Api {
 }
 
 /// Information used in `register` request body.
+/// 
+/// For credentials restrictions, see `Api::register`
 #[derive(serde::Serialize, Object)]
 pub struct RegisterBody {
-    /// User's username. Has to be unique.
+    /// User's username.
     pub username: String,
-    /// User's email. Has to be unique.
+    /// User's email.
     pub email: String,
     /// User's password.
     pub password: String,
 }
 
+/// Used to validate credentials are valid.
 struct RegisterCredentials {
-    /// User's username. Has to be unique.
+    /// User's username.
     username: String,
-    /// User's email. Has to be unique.
+    /// User's email.
     email: String,
     /// User's password.
     password: String,
@@ -359,18 +370,18 @@ impl ResponseMessage {
 ///
 /// Only exist so it can be overridden in tests with a version that returns a random IP string
 /// from a range that does not belong to local network.
-#[cfg(not(feature = "integration-test"))]
+#[cfg(not(debug_assertions))]
 fn get_ip_string(address: &SocketAddr) -> String {
     address.ip().to_string()
 }
 
 /// In tests, clients are always local, so IP address is always loopback
 /// The API we are using does not like that, so we make up an IP
-#[cfg(feature = "integration-test")]
+#[cfg(debug_assertions)]
 fn get_ip_string(address: &SocketAddr) -> String {
     let mut ip = address.ip();
 
-    if crate::helpers::is_loopback_address(&ip) {
+    if ip.is_loopback() || ip.is_multicast() {
         const IP_BLOCK_SIZE: u32 = 2_097_152;
         let range_start = [78u8, 160u8, 0u8, 0u8];
         let offset: [u8; 4] = rand::thread_rng().gen_range(0..IP_BLOCK_SIZE).to_be_bytes();

@@ -61,7 +61,7 @@ impl Respond for GeolocationResponder {
             return ResponseTemplate::new(400);
         };
 
-        if is_loopback_address(&ip) {
+        if ip.is_loopback() || ip.is_multicast() {
             return ResponseTemplate::new(200).set_body_string("Undefined,Undefined");
         }
 
