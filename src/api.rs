@@ -8,6 +8,7 @@ use poem_openapi::payload::Json;
 use poem_openapi::{ApiResponse, Object, OpenApi, SecurityScheme};
 use sqlx::SqlitePool;
 use std::net::SocketAddr;
+use std::str::FromStr;
 #[cfg(feature = "integration-test")]
 use {
     rand::Rng,
@@ -58,11 +59,18 @@ impl Api {
     /// `500 Internal Server Error` if the database operation fails.
     #[oai(path = "/register", method = "post")]
     pub async fn register(&self, body: Json<RegisterBody>) -> RegisterResponse {
-        let password_hash = password::hash(&body.password);
+        let credentials = match RegisterCredentials::try_from(body.0) {
+            Ok(c) => c,
+            Err(e) => return RegisterResponse::InvalidCredentials(
+                ResponseMessage::new(&format!("Invalid credentials: {e}")).into_json()
+            ),
+        };
+        
+        let password_hash = password::hash(&credentials.password);
         let user_id = match queries::register_user(
             &self.database,
-            &body.username,
-            &body.email,
+            &credentials.username,
+            &credentials.email,
             &password_hash,
         )
         .await
@@ -137,7 +145,7 @@ impl Api {
     ) -> WeatherResponse {
         if !check_token(&authorization.0.token) {
             return WeatherResponse::Unauthorized(
-                ResponseMessage::new("Unauhorized access.").into_json()
+                ResponseMessage::new("Unauthorized access.").into_json()
             );
         }
 
@@ -186,6 +194,51 @@ pub struct RegisterBody {
     pub password: String,
 }
 
+struct RegisterCredentials {
+    /// User's username. Has to be unique.
+    username: String,
+    /// User's email. Has to be unique.
+    email: String,
+    /// User's password.
+    password: String,
+}
+
+impl TryFrom<RegisterBody> for RegisterCredentials {
+    type Error = String;
+
+    fn try_from(RegisterBody { username, email, password }: RegisterBody) -> Result<Self, Self::Error> {
+        if !(6usize..=24usize).contains(&username.len()) {
+            let error_message = "Username needs to be at least 6 and at most 24 characters".to_owned();
+            return Err(error_message);
+        }
+
+        if username.chars().any(|c| !c.is_alphanumeric() && !['.', '_'].contains(&c)) {
+            let error_message = "Username can only contain letters, numbers, dots and underscores".to_owned();
+            return Err(error_message);
+        }
+
+        let Ok(email) = email_address::EmailAddress::from_str(&email) else {
+            let error_message = "Username can only contain letters, numbers, dots and underscores".to_owned();
+            return Err(error_message);
+        };
+
+        if !(8usize..=32usize).contains(&password.len()) {
+            let error_message = "Password needs to be at least 8 and at most 32 characters".to_owned();
+            return Err(error_message);
+        }
+
+        let allowed_chars = "~!@$%^&*()_-+={[}]|:',.?/";
+        if password.chars().any(|c| !c.is_alphanumeric() && !allowed_chars.chars().any(|symbol| symbol.eq(&c))) {
+            let error_message = format!("Username can only contain letters, numbers and symbols {allowed_chars}");
+            return Err(error_message);
+        }
+
+        let credentials = RegisterCredentials { username, email: email.email(), password };
+
+        Ok(credentials)
+    }
+}
+
 /// Information used in `login` request body.
 #[derive(serde::Serialize, Object)]
 pub struct LoginBody {
@@ -214,6 +267,9 @@ pub enum RegisterResponse {
     /// Returned when registration succeeds.
     #[oai(status = 201)]
     Registered(Json<RegisterResponseBody>),
+    /// Returned when registration credentials are not valid.
+    #[oai(status = 400)]
+    InvalidCredentials(ResponseBody),
     /// Returned when user with same credentials exists.
     #[oai(status = 409)]
     AlreadyRegistered(ResponseBody),
